@@ -103,6 +103,7 @@ by running Telegraf with the `--debug` argument.
     - repl_oplog_window_sec (integer)
     - resident_megabytes (integer)
     - state (string)
+    - state_num (integer)
     - total_available (integer)
     - total_created (integer)
     - total_in_use (integer)

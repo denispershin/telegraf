@@ -240,6 +240,7 @@ func TestStateTag(t *testing.T) {
 		"inserts_per_sec":           int64(0),
 		"member_status":             "PRI",
 		"state":                     "PRIMARY",
+		"state_num":                 int64(0),
 		"net_in_bytes_count":        int64(0),
 		"net_in_bytes":              int64(0),
 		"net_out_bytes_count":       int64(0),
