@@ -531,3 +531,39 @@ func TestAddTopStats(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrentOpStats(t *testing.T) {
+	inprogs := []Inprog{{
+		Host:   "host",
+		Client: "127.0.0.1:1110",
+	}, {
+		Host:   "host",
+		Client: "127.0.0.1:1111",
+	}}
+	var currentOpLines []CurrentOpLine
+	for range inprogs {
+		currentOpLine := CurrentOpLine{
+			Host:        "host",
+			Client:      "127.0.0.1",
+			Connections: 0,
+		}
+		currentOpLines = append(currentOpLines, currentOpLine)
+	}
+
+	d := NewMongodbData(
+		&StatLine{
+			CurrentOpLines: currentOpLines,
+		},
+		tags,
+	)
+
+	var acc testutil.Accumulator
+	d.AddCurrentOpStats()
+	d.flush(&acc)
+
+	for range currentOpLines {
+		for key := range currentOpStats {
+			assert.True(t, acc.HasField("mongodb_current_stats", key))
+		}
+	}
+}

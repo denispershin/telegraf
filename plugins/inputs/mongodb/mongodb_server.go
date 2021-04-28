@@ -87,6 +87,24 @@ func (s *Server) gatherTopStatData() (*TopStats, error) {
 	return topStats, nil
 }
 
+func (s *Server) gatherCurrentOpData() (*CurrentOpStats, error) {
+	currentOp := &CurrentOpStats{}
+	err := s.Session.DB("admin").Run(bson.D{
+		{
+			Name:  "currentOp",
+			Value: true,
+		},
+		{
+			Name:  "$all",
+			Value: true,
+		},
+	}, currentOp)
+	if err != nil {
+		return nil, err
+	}
+	return currentOp, nil
+}
+
 func (s *Server) gatherClusterStatus() (*ClusterStatus, error) {
 	chunkCount, err := s.Session.DB("config").C("chunks").Find(bson.M{"jumbo": true}).Count()
 	if err != nil {
@@ -206,7 +224,7 @@ func (s *Server) gatherCollectionStats(colStatsDbs []string) (*ColStats, error) 
 	return results, nil
 }
 
-func (s *Server) gatherData(acc telegraf.Accumulator, gatherClusterStatus bool, gatherDbStats bool, gatherColStats bool, gatherTopStat bool, colStatsDbs []string) error {
+func (s *Server) gatherData(acc telegraf.Accumulator, gatherClusterStatus bool, gatherDbStats bool, gatherColStats bool, gatherTopStat bool, colStatsDbs []string, gatherCurrentOpData bool) error {
 	s.Session.SetMode(mgo.Eventual, true)
 	s.Session.SetSocketTimeout(0)
 
@@ -281,6 +299,16 @@ func (s *Server) gatherData(acc telegraf.Accumulator, gatherClusterStatus bool, 
 		topStatData = topStats
 	}
 
+	currentOpData := &CurrentOpStats{}
+	if gatherCurrentOpData {
+		currentOp, err := s.gatherCurrentOpData()
+		if err != nil {
+			s.Log.Debugf("Unable to gather current op data: %s", err.Error())
+			return err
+		}
+		currentOpData = currentOp
+	}
+
 	result := &MongoStatus{
 		ServerStatus:  serverStatus,
 		ReplSetStatus: replSetStatus,
@@ -290,6 +318,7 @@ func (s *Server) gatherData(acc telegraf.Accumulator, gatherClusterStatus bool, 
 		ShardStats:    shardStats,
 		OplogStats:    oplogStats,
 		TopStats:      topStatData,
+		CurrentOp:     currentOpData,
 	}
 
 	result.SampleTime = time.Now()
@@ -308,6 +337,7 @@ func (s *Server) gatherData(acc telegraf.Accumulator, gatherClusterStatus bool, 
 		data.AddColStats()
 		data.AddShardHostStats()
 		data.AddTopStats()
+		data.AddCurrentOpStats()
 		data.flush(acc)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/influxdata/telegraf"
 )
@@ -16,6 +17,7 @@ type MongodbData struct {
 	ColData       []ColData
 	ShardHostData []DbData
 	TopStatsData  []DbData
+	CurrentOpData []DbData
 }
 
 type DbData struct {
@@ -286,6 +288,12 @@ var topDataStats = map[string]string{
 	"commands_count":   "CommandsCount",
 }
 
+var currentOpStats = map[string]string{
+	"current_op_host":        "Host",
+	"current_op_client":      "Client",
+	"current_op_connections": "Connections",
+}
+
 func (d *MongodbData) AddDbStats() {
 	for _, dbstat := range d.StatLine.DbStatsLines {
 		dbStatLine := reflect.ValueOf(&dbstat).Elem()
@@ -348,6 +356,31 @@ func (d *MongodbData) AddTopStats() {
 			newTopStatData.Fields[key] = val
 		}
 		d.TopStatsData = append(d.TopStatsData, *newTopStatData)
+	}
+}
+
+func (d *MongodbData) AddCurrentOpStats() {
+	for _, currentOpStat := range d.StatLine.CurrentOpLines {
+		currentOpLine := reflect.ValueOf(&currentOpStat).Elem()
+		newCurrentOpData := &DbData{
+			Name:   currentOpStat.Client,
+			Fields: make(map[string]interface{}),
+		}
+		newCurrentOpData.Fields["type"] = "current_op_stat"
+		for key, value := range currentOpStats {
+			val := currentOpLine.FieldByName(value).Interface()
+			newCurrentOpData.Fields[key] = val
+		}
+		d.CurrentOpData = append(d.CurrentOpData, *newCurrentOpData)
+	}
+
+}
+
+func getCurrentOpClientIP(hostWithPort string) string {
+	if len(hostWithPort) > 0 {
+		return strings.Split(hostWithPort, ":")[0]
+	} else {
+		return "unknown"
 	}
 }
 
@@ -456,5 +489,15 @@ func (d *MongodbData) flush(acc telegraf.Accumulator) {
 			d.StatLine.Time,
 		)
 		col.Fields = make(map[string]interface{})
+	}
+	for _, data := range d.CurrentOpData {
+		d.Tags["client_ip"] = data.Name
+		acc.AddFields(
+			"mongodb_current_stats",
+			data.Fields,
+			d.Tags,
+			d.StatLine.Time,
+		)
+		data.Fields = make(map[string]interface{})
 	}
 }

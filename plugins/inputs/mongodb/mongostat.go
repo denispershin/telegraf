@@ -38,6 +38,7 @@ type MongoStatus struct {
 	ShardStats    *ShardStats
 	OplogStats    *OplogStats
 	TopStats      *TopStats
+	CurrentOp     *CurrentOpStats
 }
 
 type ServerStatus struct {
@@ -553,6 +554,15 @@ type StatHeader struct {
 	ActivateFlags int
 }
 
+type Inprog struct {
+	Host   string `bson:"host"`
+	Client string `bson:"client"`
+}
+
+type CurrentOpStats struct {
+	Inprog []Inprog `bson:"inprog"`
+}
+
 // StatHeaders are the complete set of data metrics supported by mongostat.
 var StatHeaders = []StatHeader{
 	{"", Always}, // placeholder for hostname column (blank header text)
@@ -796,6 +806,8 @@ type StatLine struct {
 
 	TopStatLines []TopStatLine
 
+	CurrentOpLines []CurrentOpLine
+
 	// TCMalloc stats field
 	TCMallocCurrentAllocatedBytes        int64
 	TCMallocHeapSize                     int64
@@ -864,6 +876,12 @@ type TopStatLine struct {
 	UpdateTime, UpdateCount       int64
 	RemoveTime, RemoveCount       int64
 	CommandsTime, CommandsCount   int64
+}
+
+type CurrentOpLine struct {
+	Host        string
+	Client      string
+	Connections int64
 }
 
 func parseLocks(stat ServerStatus) map[string]LockUsage {
@@ -1427,6 +1445,25 @@ func NewStatLine(oldMongo, newMongo MongoStatus, key string, all bool, sampleSec
 				CommandsCount:  data.TSCollection.Commands.Count,
 			}
 			returnVal.TopStatLines = append(returnVal.TopStatLines, *topStatDataLine)
+		}
+	}
+
+	if newMongo.CurrentOp != nil {
+		type Connection struct {
+			Host string
+			Ip   string
+		}
+		result := make(map[Connection]int64)
+		for _, data := range newMongo.CurrentOp.Inprog {
+			result[Connection{Host: data.Host, Ip: getCurrentOpClientIP(data.Client)}]++
+		}
+		for key, value := range result {
+			currentOpDataLine := &CurrentOpLine{
+				Host:        key.Host,
+				Client:      key.Ip,
+				Connections: value,
+			}
+			returnVal.CurrentOpLines = append(returnVal.CurrentOpLines, *currentOpDataLine)
 		}
 	}
 
